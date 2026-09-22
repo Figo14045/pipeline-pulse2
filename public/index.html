@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline Pulse</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+  :root{
+    color-scheme: light;
+    --page-bg:#f9f9f7; --surface:#fcfcfb; --surface-raised:#ffffff;
+    --ink-primary:#0b0b0b; --ink-secondary:#52514e; --ink-muted:#898781;
+    --gridline:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
+    --accent:#2a78d6; --accent-soft:#cde2fb;
+    --seq-1:#86b6ef; --seq-2:#6da7ec; --seq-3:#3987e5; --seq-4:#2a78d6; --seq-5:#1c5cab;
+    --good:#0ca30c; --good-text:#006300; --critical:#d03b3b; --warning:#fab219;
+    --de-emph:#c3c2b7; --de-emph-text:#898781;
+    --shadow: 0 1px 2px rgba(11,11,11,0.06), 0 6px 20px rgba(11,11,11,0.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme: dark;
+      --page-bg:#0d0d0d; --surface:#1a1a19; --surface-raised:#202220;
+      --ink-primary:#ffffff; --ink-secondary:#c3c2b7; --ink-muted:#898781;
+      --gridline:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+      --accent:#3987e5; --accent-soft:#18314d;
+      --seq-1:#184f95; --seq-2:#1c5cab; --seq-3:#256abf; --seq-4:#3987e5; --seq-5:#5598e7;
+      --good:#0ca30c; --good-text:#3fd23f; --critical:#e66767; --warning:#fab219;
+      --de-emph:#3a3a37; --de-emph-text:#8f8d86;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 6px 24px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --page-bg:#0d0d0d; --surface:#1a1a19; --surface-raised:#202220;
+    --ink-primary:#ffffff; --ink-secondary:#c3c2b7; --ink-muted:#898781;
+    --gridline:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+    --accent:#3987e5; --accent-soft:#18314d;
+    --seq-1:#184f95; --seq-2:#1c5cab; --seq-3:#256abf; --seq-4:#3987e5; --seq-5:#5598e7;
+    --good:#0ca30c; --good-text:#3fd23f; --critical:#e66767; --warning:#fab219;
+    --de-emph:#3a3a37; --de-emph-text:#8f8d86;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 6px 24px rgba(0,0,0,0.35);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--page-bg); color:var(--ink-primary);
+    font-family:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .figures, .tabular{ font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
+
+  .wrap{ max-width:1180px; margin:0 auto; padding:28px 24px 64px; }
+
+  header.top{
+    display:flex; align-items:flex-start; justify-content:space-between; gap:20px;
+    flex-wrap:wrap; padding-bottom:20px; border-bottom:1px solid var(--border); margin-bottom:24px;
+  }
+  .eyebrow{
+    font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--accent); margin:0 0 6px;
+  }
+  h1{ font-size:26px; font-weight:700; margin:0 0 6px; letter-spacing:-0.01em; text-wrap:balance; }
+  .subtitle{ font-size:13.5px; color:var(--ink-secondary); margin:0; max-width:52ch; }
+  .top-meta{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
+  .refresh-row{ display:flex; align-items:center; gap:10px; }
+  .refresh-hint{ font-size:11px; color:var(--ink-muted); text-align:right; margin-top:5px; max-width:260px; }
+  .refresh-hint b{ color:var(--ink-secondary); }
+  #asOf{ font-size:12px; color:var(--ink-muted); }
+  #asOf .dot{ display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--good); margin-right:6px; position:relative; top:-1px; }
+  #asOf.stale .dot{ background:var(--warning); }
+
+  button.refresh{
+    display:inline-flex; align-items:center; gap:7px; font-family:inherit; font-size:13px; font-weight:600;
+    padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:var(--surface-raised);
+    color:var(--ink-primary); cursor:pointer; box-shadow:var(--shadow); transition:transform .12s ease, opacity .12s ease;
+  }
+  button.refresh:hover{ transform:translateY(-1px); }
+  button.refresh:active{ transform:translateY(0); }
+  button.refresh[disabled]{ opacity:.6; cursor:default; transform:none; }
+  button.refresh svg{ width:14px; height:14px; }
+  button.refresh svg.spin{ animation: spin 0.9s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce){ button.refresh svg.spin{ animation:none; } }
+
+  #liveBanner{
+    display:none; align-items:center; gap:8px; font-size:12.5px; color:var(--critical);
+    background:color-mix(in srgb, var(--critical) 10%, var(--surface)); border:1px solid color-mix(in srgb, var(--critical) 35%, var(--border));
+    border-radius:8px; padding:8px 12px; margin-bottom:18px;
+  }
+  #liveBanner.show{ display:flex; }
+
+  #initialLoad{
+    display:flex; align-items:center; gap:10px; justify-content:center; color:var(--ink-secondary);
+    font-size:13px; padding:60px 0; flex-direction:column;
+  }
+  #initialLoad svg{ width:22px; height:22px; animation: spin 0.9s linear infinite; color:var(--accent); }
+  @media (prefers-reduced-motion: reduce){ #initialLoad svg{ animation:none; } }
+  #dashboardContent{ display:none; }
+  #dashboardContent.ready{ display:block; }
+
+  .kpi-grid{ display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:26px; }
+  @media (max-width:920px){ .kpi-grid{ grid-template-columns:repeat(3,1fr); } }
+  @media (max-width:600px){ .kpi-grid{ grid-template-columns:repeat(2,1fr); } }
+  .kpi{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 14px 12px;
+    display:flex; flex-direction:column; gap:6px; min-height:96px; position:relative;
+  }
+  .kpi .label{ font-size:11px; color:var(--ink-muted); font-weight:600; letter-spacing:.02em; }
+  .kpi .value{ font-size:21px; font-weight:700; letter-spacing:-0.01em; }
+  .kpi .sub{ font-size:11.5px; color:var(--ink-secondary); }
+  .kpi .wow{ font-size:11px; margin-top:2px; display:flex; align-items:center; gap:4px; }
+  .kpi .wow .arrow{ font-size:10px; }
+  .kpi .wow.neutral{ color:var(--ink-muted); }
+  .kpi .wow.good{ color:var(--good-text); }
+  .kpi .wow.bad{ color:var(--critical); }
+  .kpi .wow.pending{ color:var(--ink-muted); font-style:italic; }
+  .chip{
+    display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:600; padding:2px 7px;
+    border-radius:99px; width:fit-content;
+  }
+  .chip.warn{ background:color-mix(in srgb, var(--warning) 22%, var(--surface)); color:color-mix(in srgb, var(--warning) 65%, var(--ink-primary)); }
+  .chip.crit{ background:color-mix(in srgb, var(--critical) 16%, var(--surface)); color:var(--critical); }
+  .chip.good{ background:color-mix(in srgb, var(--good) 16%, var(--surface)); color:var(--good-text); }
+  .kpi .errflag{ position:absolute; top:10px; right:10px; width:7px; height:7px; border-radius:50%; background:var(--warning); display:none; }
+  .kpi.section-error .errflag{ display:block; }
+
+  .panel-grid{ display:grid; grid-template-columns: 1.1fr 1fr; gap:16px; margin-bottom:16px; }
+  @media (max-width:880px){ .panel-grid{ grid-template-columns:1fr; } }
+
+  .panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px 20px;
+    box-shadow:var(--shadow); position:relative;
+  }
+  .panel h2{ font-size:14.5px; font-weight:700; margin:0 0 3px; }
+  .panel .panel-sub{ font-size:12px; color:var(--ink-secondary); margin:0 0 16px; }
+  .panel .section-err{
+    display:none; align-items:center; gap:6px; font-size:11.5px; color:var(--warning); margin-bottom:10px;
+    background:color-mix(in srgb, var(--warning) 12%, var(--surface)); border-radius:6px; padding:5px 9px;
+  }
+  .panel.section-error .section-err{ display:flex; }
+
+  /* horizontal bar rows (pipeline mix / funnel / owners) */
+  .bar-row{ display:grid; grid-template-columns: 148px 1fr 92px; align-items:center; gap:10px; margin-bottom:9px; }
+  .bar-row:last-child{ margin-bottom:0; }
+  .bar-row .rlabel{ font-size:12px; color:var(--ink-primary); font-weight:500; line-height:1.25; }
+  .bar-row .rlabel .sub{ display:block; font-size:10.5px; color:var(--ink-muted); font-weight:400; }
+  .bar-track{ position:relative; height:20px; background:var(--gridline); border-radius:5px; overflow:hidden; }
+  .bar-fill{ position:absolute; top:0; left:0; height:100%; border-radius:5px; transition:width .5s cubic-bezier(.2,.8,.2,1); }
+  .bar-row .rval{ font-size:12.5px; text-align:right; font-weight:600; }
+  .bar-row .rval .cnt{ display:block; font-size:10.5px; color:var(--ink-muted); font-weight:400; }
+
+  .legend{ display:flex; gap:16px; margin-bottom:14px; flex-wrap:wrap; }
+  .legend .item{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-secondary); }
+  .legend .swatch{ width:10px; height:10px; border-radius:3px; }
+
+  .owners-note{ font-size:11.5px; color:var(--ink-muted); margin-top:12px; padding-top:12px; border-top:1px dashed var(--gridline); }
+
+  /* trend chart */
+  .chart-wrap{ position:relative; }
+  svg.chart{ width:100%; height:auto; display:block; overflow:visible; }
+  .gridline{ stroke:var(--gridline); stroke-width:1; }
+  .axislabel{ font-size:9.5px; fill:var(--ink-muted); font-family: system-ui, sans-serif; }
+  .hoverline{ stroke:var(--baseline); stroke-width:1; opacity:0; }
+  .tooltip{
+    position:absolute; pointer-events:none; background:var(--surface-raised); border:1px solid var(--border);
+    border-radius:8px; padding:8px 10px; font-size:11.5px; box-shadow:var(--shadow); opacity:0; transform:translate(-50%,-100%);
+    transition:opacity .1s ease; z-index:5; white-space:nowrap;
+  }
+  .tooltip .tt-month{ font-weight:600; margin-bottom:4px; }
+  .tooltip .tt-row{ display:flex; align-items:center; gap:6px; justify-content:space-between; gap:10px; }
+  .tooltip .tt-dot{ width:7px; height:7px; border-radius:50%; display:inline-block; }
+
+  /* insights */
+  .insights{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:6px; }
+  @media (max-width:760px){ .insights{ grid-template-columns:1fr; } }
+  .insight{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:15px 16px;
+    display:flex; gap:12px; align-items:flex-start;
+  }
+  .insight .mark{ width:26px; height:26px; border-radius:7px; flex:0 0 auto; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+  .insight .mark.crit{ background:color-mix(in srgb, var(--critical) 16%, var(--surface)); color:var(--critical); }
+  .insight .mark.warn{ background:color-mix(in srgb, var(--warning) 20%, var(--surface)); color:color-mix(in srgb, var(--warning) 55%, var(--ink-primary)); }
+  .insight .mark.info{ background:var(--accent-soft); color:var(--accent); }
+  .insight h3{ font-size:13.5px; margin:0 0 4px; }
+  .insight p{ font-size:12.5px; color:var(--ink-secondary); margin:0; line-height:1.5; }
+
+  footer.foot{ margin-top:28px; font-size:11.5px; color:var(--ink-muted); line-height:1.6; border-top:1px solid var(--border); padding-top:16px; }
+  footer.foot b{ color:var(--ink-secondary); }
+
+  .section-title{ font-size:15.5px; font-weight:700; margin:30px 0 4px; }
+  .section-sub{ font-size:12px; color:var(--ink-secondary); margin:0 0 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <p class="eyebrow">SymphonyAI Financial Services &middot; HubSpot CRM</p>
+      <h1>Pipeline Pulse</h1>
+      <p class="subtitle">Live open-deal value, stage funnel, stall risk, win rate and owner concentration across every active pipeline.</p>
+    </div>
+    <div class="top-meta">
+      <div class="refresh-row">
+        <span id="asOf"><span class="dot"></span>loading&hellip;</span>
+        <button class="refresh" id="refreshBtn" type="button">
+          <svg id="refreshIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          <span id="refreshLabel">Refresh from HubSpot</span>
+        </button>
+      </div>
+      <p class="refresh-hint">Pulls live data through this app's own server-side HubSpot connection &mdash; everyone viewing this page sees the same pull.</p>
+    </div>
+  </header>
+
+  <div id="liveBanner"></div>
+
+  <div id="initialLoad">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+    <span>Pulling live pipeline data from HubSpot&hellip;</span>
+  </div>
+
+  <div id="dashboardContent">
+    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <div class="panel-grid">
+      <div class="panel" id="panelMix">
+        <div class="section-err"><span>&#9888;</span><span>Couldn't refresh this section &mdash; showing last known data.</span></div>
+        <h2>Open pipeline by type</h2>
+        <p class="panel-sub" id="mixSub">Open deals across every pipeline &mdash; one of them usually carries almost all of it.</p>
+        <div id="mixBars"></div>
+      </div>
+
+      <div class="panel" id="panelFunnel">
+        <div class="section-err"><span>&#9888;</span><span>Couldn't refresh this section &mdash; showing last known data.</span></div>
+        <h2>Largest pipeline &mdash; stage funnel</h2>
+        <p class="panel-sub">Open deals in the pipeline carrying the most value, earliest stage to latest.</p>
+        <div id="funnelBars"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="panelTrend" style="margin-bottom:16px;">
+      <div class="section-err"><span>&#9888;</span><span>Couldn't refresh this section &mdash; showing last known data.</span></div>
+      <h2>Closed&#8211;won vs. closed&#8211;lost value, trailing 12 months</h2>
+      <p class="panel-sub">Monthly closed deal value by outcome. Hover a month for detail.</p>
+      <div class="legend">
+        <span class="item"><span class="swatch" style="background:var(--good)"></span>Closed won</span>
+        <span class="item"><span class="swatch" style="background:var(--critical)"></span>Closed lost</span>
+      </div>
+      <div class="chart-wrap" id="trendChartWrap"></div>
+    </div>
+
+    <div class="panel" id="panelOwners">
+      <div class="section-err"><span>&#9888;</span><span>Couldn't refresh this section &mdash; showing last known data.</span></div>
+      <h2>Open pipeline value by owner</h2>
+      <p class="panel-sub" id="ownersSub">Top 10 deal owners by open deal value.</p>
+      <div id="ownerBars"></div>
+      <div class="owners-note" id="ownersNote"></div>
+    </div>
+
+    <p class="section-title">Key insights</p>
+    <p class="section-sub">Read off the numbers above &mdash; recalculated on every refresh.</p>
+    <div class="insights" id="insightsGrid"></div>
+  </div>
+
+  <footer class="foot">
+    <p><b>Source:</b> HubSpot DEAL records, amounts in company currency (USD), pulled server-side through this app's own HubSpot Private App connection. <b>Stalled</b> = HubSpot's <code>hs_is_stalled</code> flag (time in current stage running &ge;20% longer than the deal owner's typical closed&#8211;won pace for that stage). <b>Weighted pipeline</b> = open deal value &times; the stage's win probability.</p>
+    <p>Click <b>Refresh from HubSpot</b> to re-run the pull live. If a section can't refresh, it keeps showing its last successful pull rather than going blank. This page also refreshes itself once automatically when it first loads.</p>
+    <p><b>Shared with everyone:</b> unlike a personal HubSpot login, this dashboard always queries HubSpot with the same server-side connection, so every viewer sees identical numbers &mdash; there's no per-person permission variation.</p>
+    <p><b>Week-over-week:</b> HubSpot only ever reports the current state of a deal, so the "vs last week" lines under Open Pipeline Value, Weighted Pipeline and Stalled Deals are built by this app, not pulled from HubSpot &mdash; every successful refresh saves a dated snapshot, and once one exists from ~a week back the comparison appears automatically. Expect "no history yet" for the first several days after this goes live.</p>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- formatting helpers ----------
+  function fmtMoney(n){
+    if (n == null || isNaN(n)) return "&mdash;";
+    var abs = Math.abs(n);
+    var s;
+    if (abs >= 1e9) s = (n/1e9).toFixed(2) + "B";
+    else if (abs >= 1e6) s = (n/1e6).toFixed(1) + "M";
+    else if (abs >= 1e3) s = (n/1e3).toFixed(0) + "K";
+    else s = n.toFixed(0);
+    return "$" + s;
+  }
+  function fmtInt(n){ return (n==null||isNaN(n)) ? "&mdash;" : n.toLocaleString("en-US"); }
+  function fmtPct(n, d){ d = d==null?1:d; return (n==null||isNaN(n)) ? "&mdash;" : n.toFixed(d) + "%"; }
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+  var MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function monthLabel(ymd, isLast){
+    var p = ymd.split("-"); var m = MONTH_LABELS[parseInt(p[1],10)-1];
+    return m + (isLast ? " (MTD)" : "");
+  }
+
+  // ---------- dashboard state ----------
+  // Starts empty; the page calls /api/refresh once automatically on load
+  // (see bottom of this file), same shape the server always returns.
+  var data = {
+    openTotal: { deals: 0, value: 0, weighted: 0 },
+    stalledTotal: { deals: 0, ofOpen: 0 },
+    pipelineMix: [],
+    fsFunnel: [],
+    trend: { months: [], won: [], wonCount: [], lost: [], lostCount: [] },
+    owners: [],
+    ownersRemainder: { count: 0, deals: 0, value: 0 }
+  };
+  var asOfDate = null;
+  var wowSnap = null;        // { openValue, weightedValue, stalledDeals } deltas from the server, or null
+  var wowConfigured = true;  // becomes false once the server says no KV store is connected
+  var hasLoadedOnce = false;
+
+  function wowLine(current, field, fmt, opts){
+    opts = opts || {};
+    if (!hasLoadedOnce) return '<span class="wow pending">loading&hellip;</span>';
+    if (!wowConfigured) return '<span class="wow pending">week-over-week isn\'t configured for this deployment</span>';
+    if (!wowSnap || wowSnap[field] == null) return '<span class="wow pending">no history yet &mdash; builds week to week</span>';
+    var prev = wowSnap[field];
+    var delta = current - prev;
+    var arrow = delta > 0 ? "&#9650;" : (delta < 0 ? "&#9660;" : "&#8212;");
+    var cls = "neutral";
+    if (opts.goodIfDown != null && delta !== 0){ cls = (delta < 0) === opts.goodIfDown ? "good" : "bad"; }
+    var sign = delta > 0 ? "+" : (delta < 0 ? "-" : "");
+    return '<span class="wow ' + cls + '"><span class="arrow">' + arrow + '</span>' + sign + fmt(Math.abs(delta)) + ' vs last week</span>';
+  }
+
+  // ---------- render (unchanged from the original dashboard) ----------
+  function setAsOf(){
+    var el = document.getElementById("asOf");
+    if (!asOfDate){ el.innerHTML = '<span class="dot"></span>loading&hellip;'; return; }
+    var s = asOfDate.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}) + " &middot; " +
+            asOfDate.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+    el.innerHTML = '<span class="dot"></span>as of ' + s;
+  }
+
+  function renderKpis(){
+    var stalledPct = 100 * data.stalledTotal.deals / data.stalledTotal.ofOpen;
+    var totalWon = data.trend.won.reduce(function(a,b){return a+b;},0);
+    var totalLost = data.trend.lost.reduce(function(a,b){return a+b;},0);
+    var totalWonCt = data.trend.wonCount.reduce(function(a,b){return a+b;},0);
+    var totalLostCt = data.trend.lostCount.reduce(function(a,b){return a+b;},0);
+    var winRateCt = 100*totalWonCt/(totalWonCt+totalLostCt);
+    var winRateVal = 100*totalWon/(totalWon+totalLost);
+    var avgWon = totalWon/totalWonCt, avgLost = totalLost/totalLostCt;
+    var weightedPct = 100*data.openTotal.weighted/data.openTotal.value;
+
+    var tiles = [
+      { label:"OPEN PIPELINE VALUE", value: fmtMoney(data.openTotal.value), sub: fmtInt(data.openTotal.deals) + " open deals", chip:null, key:"openTotal",
+        wow: wowLine(data.openTotal.value, "openValue", fmtMoney) },
+      { label:"WEIGHTED PIPELINE", value: fmtMoney(data.openTotal.weighted), sub: fmtPct(weightedPct) + " of open value, probability-adjusted", chip:null, key:"openTotal",
+        wow: wowLine(data.openTotal.weighted, "weightedValue", fmtMoney) },
+      { label:"STALLED DEALS", value: fmtInt(data.stalledTotal.deals), sub: fmtPct(stalledPct) + " of all open deals", chip:{cls:stalledPct>50?"crit":"warn", text: stalledPct>50 ? "At risk" : "Watch"}, key:"stalledTotal",
+        wow: wowLine(data.stalledTotal.deals, "stalledDeals", fmtInt, {goodIfDown:true}) },
+      { label:"WIN RATE (BY DEAL COUNT)", value: fmtPct(winRateCt), sub: fmtInt(totalWonCt) + " won / " + fmtInt(totalLostCt) + " lost, trailing 12mo", chip:null, key:"trend", wow:null },
+      { label:"WIN RATE (BY VALUE)", value: fmtPct(winRateVal), sub: fmtMoney(totalWon) + " won / " + fmtMoney(totalLost) + " lost", chip:{cls:"crit", text:"Value-weighted gap"}, key:"trend", wow:null },
+      { label:"AVG. DEAL SIZE, WON VS LOST", value: fmtMoney(avgWon) + " / " + fmtMoney(avgLost), sub: "lost deals average " + (avgLost/avgWon).toFixed(1) + "&times; larger", chip:null, key:"trend", wow:null }
+    ];
+    var grid = document.getElementById("kpiGrid");
+    grid.innerHTML = tiles.map(function(t){
+      return '<div class="kpi" data-key="'+t.key+'"><span class="errflag" title="Last refresh failed for this metric"></span>' +
+        '<span class="label">'+t.label+'</span>' +
+        '<span class="value figures">'+t.value+'</span>' +
+        (t.chip ? '<span class="chip '+t.chip.cls+'">'+t.chip.text+'</span>' : '') +
+        '<span class="sub">'+t.sub+'</span>' +
+        (t.wow ? t.wow : '') + '</div>';
+    }).join("");
+  }
+
+  function renderBarGroup(containerId, rows, opts){
+    opts = opts || {};
+    var max = rows.length ? Math.max.apply(null, rows.map(function(r){ return r.value; })) : 0;
+    var html = rows.map(function(r){
+      var pct = max > 0 ? Math.max(2, 100*r.value/max) : 0;
+      var color = opts.colorFor ? opts.colorFor(r) : "var(--accent)";
+      var subLabel = opts.rowSub ? opts.rowSub(r) : (fmtInt(r.deals) + " deals");
+      return '<div class="bar-row">' +
+        '<div class="rlabel">'+esc(r.name || r.stage)+'</div>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:'+pct.toFixed(1)+'%; background:'+color+';"></div></div>' +
+        '<div class="rval figures">'+fmtMoney(r.value)+'<span class="cnt">'+subLabel+'</span></div>' +
+        '</div>';
+    }).join("");
+    document.getElementById(containerId).innerHTML = html;
+  }
+
+  function renderMix(){
+    renderBarGroup("mixBars", data.pipelineMix, {
+      colorFor: function(r){ return r.emphasis ? "var(--accent)" : "var(--de-emph)"; }
+    });
+    document.getElementById("mixSub").textContent =
+      fmtIntPlain(data.openTotal.deals) + " open deals across " + data.pipelineMix.length + " pipeline" + (data.pipelineMix.length===1?"":"s") +
+      (data.pipelineMix.length>1 ? " — one of them usually carries almost all of it." : ".");
+  }
+  function fmtIntPlain(n){ return (n==null||isNaN(n)) ? "0" : n.toLocaleString("en-US"); }
+
+  function renderFunnel(){
+    var ramp = ["var(--seq-1)","var(--seq-2)","var(--seq-3)","var(--seq-4)","var(--seq-5)"];
+    var i = 0;
+    renderBarGroup("funnelBars", data.fsFunnel, {
+      colorFor: function(){ return ramp[Math.min(i++, ramp.length-1)]; }
+    });
+  }
+
+  function renderOwners(){
+    renderBarGroup("ownerBars", data.owners, { colorFor: function(){ return "var(--accent)"; } });
+    var r = data.ownersRemainder;
+    document.getElementById("ownersSub").textContent =
+      "Top " + data.owners.length + " deal owner" + (data.owners.length===1?"":"s") + " by open deal value.";
+    document.getElementById("ownersNote").innerHTML = r.count
+      ? ("+ " + r.count + " more owners hold the remaining " + fmtInt(r.deals) + " deals worth " + fmtMoney(r.value) + ".")
+      : "";
+  }
+
+  function renderTrend(){
+    var months = data.trend.months, won = data.trend.won, lost = data.trend.lost;
+    var wrap = document.getElementById("trendChartWrap");
+    if (!months.length){ wrap.innerHTML = ""; return; }
+    var W = 1000, H = 260, padL = 46, padR = 12, padT = 14, padB = 26;
+    var innerW = W - padL - padR, innerH = H - padT - padB;
+    var maxV = Math.max.apply(null, won.concat(lost));
+    var niceMax = Math.ceil(maxV/25000000)*25000000 || maxV || 1;
+    var n = months.length;
+    function x(i){ return n>1 ? padL + innerW * i/(n-1) : padL; }
+    function y(v){ return padT + innerH * (1 - v/niceMax); }
+    function pathFor(arr){
+      return arr.map(function(v,i){ return (i===0?"M":"L") + x(i).toFixed(1) + "," + y(v).toFixed(1); }).join(" ");
+    }
+    var yTicks = [0, niceMax*0.25, niceMax*0.5, niceMax*0.75, niceMax];
+    var gridSvg = yTicks.map(function(t){
+      var yy = y(t).toFixed(1);
+      return '<line class="gridline" x1="'+padL+'" x2="'+(W-padR)+'" y1="'+yy+'" y2="'+yy+'"></line>' +
+             '<text class="axislabel" x="'+(padL-8)+'" y="'+yy+'" text-anchor="end" dominant-baseline="middle">'+fmtMoney(t)+'</text>';
+    }).join("");
+    var xLabels = months.map(function(m,i){
+      return '<text class="axislabel" x="'+x(i).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle">'+monthLabel(m, i===n-1)+'</text>';
+    }).join("");
+    var hoverCols = months.map(function(m,i){
+      return '<rect class="hover-col" data-i="'+i+'" x="'+(x(i)-innerW/n/2).toFixed(1)+'" y="'+padT+'" width="'+(innerW/n).toFixed(1)+'" height="'+innerH+'" fill="transparent"></rect>';
+    }).join("");
+
+    wrap.innerHTML =
+      '<svg class="chart" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">' +
+        gridSvg +
+        '<path d="'+pathFor(lost)+'" fill="none" stroke="var(--critical)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>' +
+        '<path d="'+pathFor(won)+'" fill="none" stroke="var(--good)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>' +
+        months.map(function(m,i){
+          return '<circle cx="'+x(i).toFixed(1)+'" cy="'+y(won[i]).toFixed(1)+'" r="2.5" fill="var(--good)"></circle>' +
+                 '<circle cx="'+x(i).toFixed(1)+'" cy="'+y(lost[i]).toFixed(1)+'" r="2.5" fill="var(--critical)"></circle>';
+        }).join("") +
+        xLabels +
+        '<line class="hoverline" id="hoverline" x1="0" x2="0" y1="'+padT+'" y2="'+(padT+innerH)+'"></line>' +
+        hoverCols +
+      '</svg>' +
+      '<div class="tooltip" id="trendTip"></div>';
+
+    var svg = wrap.querySelector("svg");
+    var tip = document.getElementById("trendTip");
+    var hoverline = document.getElementById("hoverline");
+    function showTip(i){
+      var rect = svg.getBoundingClientRect();
+      var scale = rect.width / W;
+      var px = x(i) * scale;
+      hoverline.setAttribute("x1", x(i)); hoverline.setAttribute("x2", x(i)); hoverline.style.opacity = 1;
+      tip.style.left = px + "px"; tip.style.top = (rect.height*0.02) + "px";
+      tip.style.opacity = 1;
+      tip.innerHTML = '<div class="tt-month">'+monthLabel(months[i], i===n-1)+' '+months[i].slice(0,4)+'</div>' +
+        '<div class="tt-row"><span><span class="tt-dot" style="background:var(--good)"></span>Won</span><span class="figures">'+fmtMoney(won[i])+' &middot; '+data.trend.wonCount[i]+'</span></div>' +
+        '<div class="tt-row"><span><span class="tt-dot" style="background:var(--critical)"></span>Lost</span><span class="figures">'+fmtMoney(lost[i])+' &middot; '+data.trend.lostCount[i]+'</span></div>';
+    }
+    function hideTip(){ tip.style.opacity = 0; hoverline.style.opacity = 0; }
+    svg.querySelectorAll(".hover-col").forEach(function(col){
+      col.addEventListener("mouseenter", function(){ showTip(parseInt(col.getAttribute("data-i"),10)); });
+      col.addEventListener("mousemove", function(){ showTip(parseInt(col.getAttribute("data-i"),10)); });
+    });
+    svg.addEventListener("mouseleave", hideTip);
+  }
+
+  function renderInsights(){
+    var grid = document.getElementById("insightsGrid");
+    if (!data.pipelineMix.length || !data.owners.length){ grid.innerHTML = ""; return; }
+    var totalWon = data.trend.won.reduce(function(a,b){return a+b;},0);
+    var totalLost = data.trend.lost.reduce(function(a,b){return a+b;},0);
+    var totalWonCt = data.trend.wonCount.reduce(function(a,b){return a+b;},0);
+    var totalLostCt = data.trend.lostCount.reduce(function(a,b){return a+b;},0);
+    var winRateCt = 100*totalWonCt/(totalWonCt+totalLostCt);
+    var winRateVal = 100*totalWon/(totalWon+totalLost);
+    var avgWon = totalWon/totalWonCt, avgLost = totalLost/totalLostCt;
+    var top = data.pipelineMix[0];
+    var topSharePct = 100*top.value/data.openTotal.value;
+    var topDealPct = 100*top.deals/data.openTotal.deals;
+    var stalledPct = 100*data.stalledTotal.deals/data.stalledTotal.ofOpen;
+    var top10Value = data.owners.reduce(function(a,o){return a+o.value;},0);
+    var top10Pct = 100*top10Value/data.openTotal.value;
+    var otherPipelinesValue = data.openTotal.value - top.value;
+
+    var cards = [
+      { mark:"info", icon:"1", title: esc(top.name) + " carries the book",
+        text: "It holds " + fmtInt(top.deals) + " of " + fmtInt(data.openTotal.deals) + " open deals (" + fmtPct(topDealPct,0) + ") and " + fmtMoney(top.value) + " of " + fmtMoney(data.openTotal.value) + " open value (" + fmtPct(topSharePct,0) + "). The rest combined hold " + fmtMoney(otherPipelinesValue) + "." },
+      { mark: stalledPct>50?"crit":"warn", icon:"2", title:"Most open deals are stalled",
+        text: fmtInt(data.stalledTotal.deals) + " of " + fmtInt(data.stalledTotal.ofOpen) + " open deals (" + fmtPct(stalledPct,0) + ") are flagged stalled &mdash; sitting longer in their current stage than the owner's typical closed-won pace. Worth a pipeline-review pass before forecasting off the raw total." },
+      { mark:"crit", icon:"3", title:"Win rate drops hard once you weight by value",
+        text: fmtPct(winRateCt,0) + " of closed deals were won by count over the trailing 12 months, but only " + fmtPct(winRateVal,0) + " by dollar value. Lost deals average " + fmtMoney(avgLost) + " versus " + fmtMoney(avgWon) + " for won deals &mdash; roughly " + (avgLost/avgWon).toFixed(1) + "&times; larger. The biggest deals are slipping disproportionately." },
+      { mark:"info", icon:"4", title:"Pipeline ownership is concentrated",
+        text: "The top " + data.owners.length + " deal owners hold " + fmtPct(top10Pct,0) + " of open pipeline value (" + fmtMoney(top10Value) + " of " + fmtMoney(data.openTotal.value) + "). Coverage risk if any leave or get reassigned." }
+    ];
+    grid.innerHTML = cards.map(function(c){
+      return '<div class="insight"><div class="mark '+c.mark+'">'+c.icon+'</div><div><h3>'+c.title+'</h3><p>'+c.text+'</p></div></div>';
+    }).join("");
+  }
+
+  function renderAll(){
+    setAsOf(); renderKpis(); renderMix(); renderFunnel(); renderTrend(); renderOwners(); renderInsights();
+  }
+
+  // ---------- refresh: one fetch to our own server, which talks to HubSpot ----------
+  function setBanner(msg, isError){
+    var b = document.getElementById("liveBanner");
+    if (!msg){ b.classList.remove("show"); b.textContent = ""; return; }
+    b.innerHTML = "<span>&#9888;</span><span>" + esc(msg) + "</span>";
+    b.classList.add("show");
+  }
+  function flagSection(panelId, failed){
+    var el = document.getElementById(panelId);
+    if (el) el.classList.toggle("section-error", !!failed);
+  }
+  function flagKpis(keys, failed){
+    document.querySelectorAll(".kpi").forEach(function(k){
+      if (keys.indexOf(k.getAttribute("data-key")) !== -1) k.classList.toggle("section-error", !!failed);
+    });
+  }
+  function setRefreshing(on){
+    var btn = document.getElementById("refreshBtn");
+    var icon = document.getElementById("refreshIcon");
+    var label = document.getElementById("refreshLabel");
+    btn.disabled = on;
+    icon.classList.toggle("spin", on);
+    label.textContent = on ? "Refreshing…" : "Refresh from HubSpot";
+  }
+
+  function doRefresh(){
+    setRefreshing(true);
+    setBanner(null);
+
+    fetch("/api/refresh", { method: "POST" })
+      .then(function(res){
+        return res.json().then(function(body){ return { status: res.status, body: body }; });
+      })
+      .then(function(r){
+        if (!r.body || r.body.ok !== true){
+          throw new Error((r.body && r.body.error) || ("Request failed (HTTP " + r.status + ")"));
+        }
+        var payload = r.body;
+        data = payload.data;
+        wowSnap = payload.wow;
+        wowConfigured = payload.wowConfigured !== false;
+        asOfDate = new Date(payload.asOf);
+        hasLoadedOnce = true;
+
+        var se = payload.sectionErrors || {};
+        flagSection("panelMix", !!se.mix);
+        flagSection("panelFunnel", !!se.funnel);
+        flagSection("panelOwners", !!se.owners);
+        flagSection("panelTrend", !!se.trend);
+        flagKpis(["openTotal","stalledTotal"], !!se.mix);
+        flagKpis(["trend"], !!se.trend);
+
+        var failedSections = Object.keys(se).filter(function(k){ return se[k]; });
+        if (failedSections.length){
+          setBanner("Some data couldn't be refreshed (" + failedSections.join(", ") + ") — showing the last successful pull for those sections.");
+          document.getElementById("asOf").classList.add("stale");
+        } else {
+          document.getElementById("asOf").classList.remove("stale");
+        }
+
+        renderAll();
+        document.getElementById("initialLoad").style.display = "none";
+        document.getElementById("dashboardContent").classList.add("ready");
+      })
+      .catch(function(err){
+        hasLoadedOnce = true;
+        setBanner("Couldn't reach HubSpot: " + err.message);
+        document.getElementById("asOf").classList.add("stale");
+        // First load ever failed: still reveal the (empty) dashboard shell
+        // rather than spinning forever, so Refresh is reachable.
+        document.getElementById("initialLoad").style.display = "none";
+        document.getElementById("dashboardContent").classList.add("ready");
+        renderAll();
+      })
+      .then(function(){ setRefreshing(false); });
+  }
+
+  document.getElementById("refreshBtn").addEventListener("click", doRefresh);
+  doRefresh(); // load live data as soon as the page opens
+})();
+</script>
+</body>
+</html>
