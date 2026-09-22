@@ -1,0 +1,16 @@
+{
+  "name": "pipeline-pulse",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone HubSpot sales pipeline dashboard, deployable to Vercel. Server-side HubSpot calls only — no token ever reaches the browser.",
+  "scripts": {
+    "dev": "vercel dev",
+    "check": "node scripts/check.js"
+  },
+  "dependencies": {
+    "@vercel/kv": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
